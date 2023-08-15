@@ -1,36 +1,46 @@
-import * as Schemas from "../schemas/schemas.ts";
-import { MongoClient } from "mongodb";
 import { Repository } from "./repositories.ts";
+import { type Basic } from "../schemas/schemas.ts";
+import { Filter, MongoClient, OptionalUnlessRequiredId } from "mongodb";
 
-type User = Schemas.User;
-type Users = Schemas.Users;
+export class MongoRepository<T extends Basic> implements Repository<T> {
+  private constructor(name: string) {
+    this.name = name;
+    this.coll = this.database.collection(name);
+  }
 
-export class MongoRepository implements Repository {
-  private constructor() {}
+  name: string;
 
-  private static instance: MongoRepository;
+  private static instance: MongoRepository<Basic>;
 
   private client = new MongoClient("mongodb://127.0.0.1:27017");
 
   private database = this.client.db("api");
 
-  private db = this.database.collection<User>("users");
+  private coll: ReturnType<typeof this.database.collection<T>>;
 
-  public static async getInstance() {
+  public static async getInstance(name: string) {
     if (!MongoRepository.instance) {
-      MongoRepository.instance = new MongoRepository();
+      MongoRepository.instance = new MongoRepository(name);
       await MongoRepository.instance.client.connect();
     }
 
     return MongoRepository.instance;
   }
 
-  async closeConnection() {
+  async closeConnection(): Promise<void> {
     await this.client.close();
   }
 
-  async findAll(): Promise<Users> {
-    const cursor = this.db.find();
+  async find(query: Partial<T>): Promise<T> {
+    const found = await this.coll.findOne(query as Filter<T>);
+
+    if (!found) throw new Error("NOT_FOUND");
+
+    return found as T;
+  }
+
+  async findAll(): Promise<T[]> {
+    const cursor = this.coll.find();
 
     const all = [];
 
@@ -41,67 +51,37 @@ export class MongoRepository implements Repository {
     return all;
   }
 
-  async findById(id: string): Promise<User> {
-    const user = await this.db.findOne({ id });
+  async findByUuid(uuid: string): Promise<T> {
+    const found = await this.coll.findOne({ uuid } as Filter<T>);
 
-    if (!user) throw new Error("USER_NOT_FOUND");
+    if (!found) throw new Error("NOT_FOUND");
 
-    return user;
+    return found as T;
   }
 
-  async findByCode(code: string): Promise<User> {
-    const user = await this.db.findOne({ code });
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    return user;
-  }
-
-  async findByEmail(email: string): Promise<User> {
-    const user = await this.db.findOne({ email });
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    return user;
-  }
-
-  async updateWithId(id: string, up: Partial<User>): Promise<User> {
-    const { matchedCount } = await this.db.updateOne(
-      { id },
+  async updateWithUuid(uuid: string, up: Partial<T>): Promise<T> {
+    const { matchedCount } = await this.coll.updateOne(
+      { uuid } as Filter<T>,
       { $set: up },
       { upsert: false }
     );
 
-    if (matchedCount === 0) throw new Error("USER_NOT_FOUND");
+    if (matchedCount === 0) throw new Error("NOT_FOUND");
 
-    const user = await this.findById(id);
+    const updated = await this.findByUuid(uuid);
 
-    if (!user) throw new Error("USER_NOT_FOUND");
+    if (!updated) throw new Error("NOT_FOUND");
 
-    return user;
+    return updated;
   }
 
-  async updateWithCode(code: string, up: Partial<User>): Promise<User> {
-    const { matchedCount } = await this.db.updateOne(
-      { code },
-      { $set: up },
-      { upsert: false }
+  async insertOne(thing: T): Promise<T> {
+    const { insertedId } = await this.coll.insertOne(
+      thing as OptionalUnlessRequiredId<T>
     );
 
-    if (matchedCount === 0) throw new Error("USER_NOT_FOUND");
+    const inserted = await this.coll.findOne({ _id: insertedId } as Filter<T>);
 
-    const user = await this.findByCode(code);
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    return user;
-  }
-
-  async insertOne(user: Schemas.User): Promise<Schemas.User> {
-    const { insertedId } = await this.db.insertOne(user);
-
-    const inserted = await this.db.findOne({ _id: insertedId });
-
-    return inserted;
+    return inserted as T;
   }
 }

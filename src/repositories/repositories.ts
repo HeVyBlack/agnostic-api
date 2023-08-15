@@ -2,15 +2,16 @@ import * as Schemas from "../schemas/schemas.ts";
 type User = Schemas.User;
 type Users = Schemas.Users;
 
-export interface Repository {
+type Entity = Schemas.Basic;
+
+export interface Repository<TEntity extends Entity> {
+  name: string;
   closeConnection(): Promise<void>;
-  findAll(): Promise<Users>;
-  findById(id: string): Promise<User>;
-  findByCode(code: string): Promise<User>;
-  findByEmail(email: string): Promise<User>;
-  updateWithId(id: string, up: Partial<User>): Promise<User>;
-  updateWithCode(code: string, up: Partial<User>): Promise<User>;
-  insertOne(user: User): Promise<User>;
+  find(query: Partial<TEntity>): Promise<TEntity>;
+  findAll(): Promise<TEntity[]>;
+  findByUuid(uuid: string): Promise<TEntity>;
+  updateWithUuid(uuid: string, up: Partial<TEntity>): Promise<TEntity>;
+  insertOne(thing: TEntity): Promise<TEntity>;
 }
 
 export * from "./mongo.repository.ts";

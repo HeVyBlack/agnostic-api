@@ -9,20 +9,22 @@ import { UserServices } from "./services/services.ts";
 import { MockRepository } from "./repositories/mock.repository.ts";
 
 const user: Schemas.User = {
-  code: "WOW!Code",
   email: "test@test.com",
   password: "SUPER_SECRET_PASSWORD",
   roles: ["user"],
   verify_email: false,
-  id: v4(),
+  uuid: v4(),
 };
 
-async function Migrate(target: Repository, source: Repository) {
+async function Migrate<T extends Schemas.Basic>(
+  target: Repository<T>,
+  source: Repository<T>
+) {
   const source_users = await source.findAll();
   for (const user of source_users) {
     try {
-      await target.findById(user.id);
-      await target.updateWithId(user.id, user);
+      await target.findByUuid(user.uuid);
+      await target.updateWithUuid(user.uuid, user);
     } catch (e) {
       await target.insertOne(user);
     }
@@ -30,9 +32,9 @@ async function Migrate(target: Repository, source: Repository) {
 }
 
 async function Main() {
-  const surreal = await SurrealRepository.getInstance();
-  const mongo = await MongoRepository.getInstance();
-  const mock = await MockRepository.getInstance();
+  const surreal = await SurrealRepository.getInstance("users");
+  const mongo = await MongoRepository.getInstance("users");
+  const mock = await MockRepository.getInstance("users");
 
   let service: UserServices;
   let sign: boolean;

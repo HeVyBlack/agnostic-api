@@ -1,58 +1,61 @@
-import * as Schemas from "../schemas/schemas.ts";
 import { Repository } from "./repositories.ts";
+import { type Basic } from "../schemas/schemas.ts";
 
-type User = Schemas.User;
-type Users = Schemas.Users;
+export class MockRepository<T extends Basic> implements Repository<T> {
+  name: string;
 
-export class MockRepository implements Repository {
-  private constructor() {}
+  private constructor(name: string) {
+    this.name = name;
+  }
 
-  private static instance: MockRepository;
+  private static instance: MockRepository<Basic>;
 
-  private db: Users = [];
+  private db: T[] = [];
 
-  public static async getInstance() {
+  public static async getInstance(name: string) {
     if (!MockRepository.instance) {
-      MockRepository.instance = new MockRepository();
+      MockRepository.instance = new MockRepository(name);
     }
 
     return MockRepository.instance;
   }
 
-  closeConnection(): Promise<void> {
+  async closeConnection(): Promise<void> {
     return;
   }
 
-  async findAll(): Promise<Users> {
+  async find(query: Partial<T>): Promise<T> {
+    const keys = Object.keys(query) as (keyof T)[];
+
+    if (keys.length === 0) throw new Error("INVALID_QUERY");
+
+    const found = this.db.find((v) => {
+      let is_found = false;
+      keys.forEach((k) => {
+        is_found = v[k] === query[k];
+      });
+      return is_found;
+    });
+
+    if (!found) throw new Error("NOT_FOUND");
+
+    return found;
+  }
+
+  async findAll(): Promise<T[]> {
     return this.db;
   }
 
-  async findById(id: string): Promise<User> {
-    const user = this.db.find((u) => u.id === id);
+  async findByUuid(uuid: string): Promise<T> {
+    const found = this.db.find((u) => u.uuid === uuid);
 
-    if (!user) throw new Error("USER_NOT_FOUND");
+    if (!found) throw new Error("NOT_FOUND");
 
-    return user;
+    return found;
   }
 
-  async findByCode(code: string): Promise<User> {
-    const user = this.db.find((u) => u.code === code);
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    return user;
-  }
-
-  async findByEmail(email: string): Promise<User> {
-    const user = this.db.find((u) => u.email === email);
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    return user;
-  }
-
-  async updateWithId(id: string, up: Partial<User>): Promise<User> {
-    const user = this.db.find((u) => u.id === id);
+  async updateWithUuid(uuid: string, up: Partial<T>): Promise<T> {
+    const user = this.db.find((u) => u.uuid === uuid);
 
     if (!user) throw new Error("USER_NOT_FOUND");
 
@@ -61,18 +64,8 @@ export class MockRepository implements Repository {
     return user;
   }
 
-  async updateWithCode(code: string, up: Partial<User>): Promise<User> {
-    const user = this.db.find((u) => u.code === code);
-
-    if (!user) throw new Error("USER_NOT_FOUND");
-
-    Object.assign(user, up);
-
-    return user;
-  }
-
-  async insertOne(user: User): Promise<User> {
-    const index = this.db.push(user);
+  async insertOne(thing: T): Promise<T> {
+    const index = this.db.push(thing);
 
     return this.db[index];
   }

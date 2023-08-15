@@ -1,20 +1,21 @@
-import * as Schemas from "../schemas/schemas.ts";
 import { Repository } from "./repositories.ts";
+import { type Basic } from "../schemas/schemas.ts";
 import { Surreal } from "surrealdb.js";
 
-type User = Schemas.User;
-type Users = Schemas.Users;
+export class SurrealRepository<T extends Basic> implements Repository<T> {
+  private constructor(name: string) {
+    this.name = name;
+  }
 
-export class SurrealRepository implements Repository {
-  private constructor() {}
+  name: string;
 
-  private static instance: SurrealRepository;
+  private static instance: SurrealRepository<Basic>;
 
   private db = new Surreal("http://127.0.0.1:8000/rpc");
 
-  public static async getInstance() {
+  public static async getInstance(name: string) {
     if (!SurrealRepository.instance) {
-      SurrealRepository.instance = new SurrealRepository();
+      SurrealRepository.instance = new SurrealRepository(name);
 
       await SurrealRepository.instance.db.signin({
         user: "api",
@@ -23,7 +24,7 @@ export class SurrealRepository implements Repository {
 
       await SurrealRepository.instance.db.use({
         ns: "api",
-        db: "users",
+        db: "agnostic",
       });
     }
 
@@ -34,72 +35,61 @@ export class SurrealRepository implements Repository {
     await this.db.close();
   }
 
-  async findAll(): Promise<Users> {
-    const [{ result }] = await this.db.query<Users[]>("SELECT * FROM users;");
+  async find(query: Partial<T>) {
+    const keys = Object.keys(query);
 
-    return result.map((u) => {
-      u.id = u.id.replace(/(^users:⟨|⟩$)/g, "");
-      return u;
+    if (keys.length === 0) throw new Error("INVALID_QUERY");
+
+    let string_query = `SELECT * FROM ${this.name} WHERE`;
+
+    keys.forEach((q) => {
+      string_query += ` ${q} == $${q} AND `;
     });
+
+    string_query = string_query.replace(/AND\s$/, ";");
+
+    const [{ result }] = await this.db.query<[T[]]>(string_query, query);
+
+    return this.handleResult(result);
   }
 
-  private handleResult(result: User[]) {
+  async findAll(): Promise<T[]> {
+    const [{ result }] = await this.db.query<[T[]]>(
+      `SELECT * FROM ${this.name};`
+    );
+
+    return result;
+  }
+
+  private handleResult(result: T[]) {
     const user = result[0];
 
     if (!user) throw new Error("USER_NOT_FOUND");
 
-    user.id = user.id.replace(/(^users:⟨|⟩$)/g, "");
-
     return user;
   }
 
-  async findById(id: string): Promise<User> {
-    const [{ result }] = await this.db.query<Users[]>(
-      `SELECT * FROM users WHERE id == users:⟨${id}⟩`
+  async findByUuid(uuid: string): Promise<T> {
+    const [{ result }] = await this.db.query<[T[]]>(
+      `SELECT * FROM ${this.name} WHERE uuid == $uuid`,
+      { uuid }
     );
 
     return this.handleResult(result);
   }
 
-  async findByCode(code: string): Promise<User> {
-    const [{ result }] = await this.db.query<Users[]>(
-      "SELECT * FROM users WHERE code == $code",
-      { code }
+  async updateWithUuid(uuid: string, up: Partial<T>): Promise<T> {
+    const [{ result }] = await this.db.query<[T[]]>(
+      `UPDATE ${this.name} MERGE $up WHERE uuid == $uuid`,
+      { up, uuid }
     );
 
     return this.handleResult(result);
   }
 
-  async findByEmail(email: string): Promise<User> {
-    const [{ result }] = await this.db.query<Users[]>(
-      "SELECT * FROM users WHERE email == $email",
-      { email }
-    );
-
-    return this.handleResult(result);
-  }
-
-  async updateWithId(id: string, up: Partial<User>): Promise<User> {
-    const [{ result }] = await this.db.query<Users[]>(
-      `UPDATE users:⟨${id}⟩ MERGE $up`,
-      { up }
-    );
-
-    return this.handleResult(result);
-  }
-
-  async updateWithCode(code: string, up: Partial<User>): Promise<User> {
-    const [{ result }] = await this.db.query<Users[]>(
-      "UPDATE users MERGE $up WHERE code == $code",
-      { up, code }
-    );
-
-    return this.handleResult(result);
-  }
-
-  async insertOne(user: User) {
+  async insertOne(thing: T): Promise<T> {
     try {
-      const [inserted] = await this.db.create("users", user);
+      const [inserted] = await this.db.create(this.name, thing);
 
       return inserted;
     } catch (e) {
@@ -107,6 +97,7 @@ export class SurrealRepository implements Repository {
         if (e.message.endsWith("already exists"))
           throw new Error("ALREADY_EXISTS");
       }
+
       throw e;
     }
   }

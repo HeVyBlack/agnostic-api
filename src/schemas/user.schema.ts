@@ -1,3 +1,4 @@
+import { Basic } from "./schemas.ts";
 import { z } from "zod";
 import { v4 } from "uuid";
 
@@ -9,11 +10,9 @@ export const Roles = z.array(Role);
 
 export type Roles = z.infer<typeof Roles>;
 
-export const User = z.object({
-  id: z.string().default(v4),
+export const User = Basic.extend({
   email: z.string().email(),
   password: z.string(),
-  code: z.string().default(v4),
   verify_email: z.boolean(),
   roles: Roles,
 });
