@@ -1,6 +1,10 @@
-import { Repository } from "./repositories.ts";
-import { type Basic } from "../schemas/schemas.ts";
-import { Filter, MongoClient, OptionalUnlessRequiredId } from "mongodb";
+import { type Repository } from "../repositories.ts";
+import { Basic } from "../schemas.ts";
+import {
+  type Filter,
+  type OptionalUnlessRequiredId,
+  MongoClient,
+} from "mongodb";
 
 export class MongoRepository<T extends Basic> implements Repository<T> {
   private constructor(name: string) {
@@ -10,21 +14,18 @@ export class MongoRepository<T extends Basic> implements Repository<T> {
 
   name: string;
 
-  private static instance: MongoRepository<Basic>;
-
   private client = new MongoClient("mongodb://127.0.0.1:27017");
 
   private database = this.client.db("api");
 
   private coll: ReturnType<typeof this.database.collection<T>>;
 
-  public static async getInstance(name: string) {
-    if (!MongoRepository.instance) {
-      MongoRepository.instance = new MongoRepository(name);
-      await MongoRepository.instance.client.connect();
-    }
+  public static async getInstance<T extends Basic>(name: string) {
+    const instance = new MongoRepository<T>(name);
 
-    return MongoRepository.instance;
+    await instance.client.connect();
+
+    return instance;
   }
 
   async closeConnection(): Promise<void> {
@@ -48,7 +49,7 @@ export class MongoRepository<T extends Basic> implements Repository<T> {
       all.push(doc);
     }
 
-    return all;
+    return all as T[];
   }
 
   async findByUuid(uuid: string): Promise<T> {
@@ -83,5 +84,9 @@ export class MongoRepository<T extends Basic> implements Repository<T> {
     const inserted = await this.coll.findOne({ _id: insertedId } as Filter<T>);
 
     return inserted as T;
+  }
+
+  async deleteByUuid(uuid: string): Promise<void> {
+    await this.coll.deleteOne({ uuid } as Filter<T>);
   }
 }

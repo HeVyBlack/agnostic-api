@@ -1,5 +1,5 @@
-import { Repository } from "./repositories.ts";
-import { type Basic } from "../schemas/schemas.ts";
+import { type Repository } from "../repositories.ts";
+import { type Basic } from "../schemas.ts";
 import { Surreal } from "surrealdb.js";
 
 export class SurrealRepository<T extends Basic> implements Repository<T> {
@@ -9,26 +9,14 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
 
   name: string;
 
-  private static instance: SurrealRepository<Basic>;
-
   private db = new Surreal("http://127.0.0.1:8000/rpc");
 
-  public static async getInstance(name: string) {
-    if (!SurrealRepository.instance) {
-      SurrealRepository.instance = new SurrealRepository(name);
+  public static async getInstance<T extends Basic>(name: string) {
+    const instance = new SurrealRepository<T>(name);
+    await instance.db.signin({ user: "api", pass: "root" });
+    await instance.db.use({ ns: "api", db: "agnostic" });
 
-      await SurrealRepository.instance.db.signin({
-        user: "api",
-        pass: "root",
-      });
-
-      await SurrealRepository.instance.db.use({
-        ns: "api",
-        db: "agnostic",
-      });
-    }
-
-    return SurrealRepository.instance;
+    return instance;
   }
 
   async closeConnection(): Promise<void> {
@@ -48,13 +36,13 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
 
     string_query = string_query.replace(/AND\s$/, ";");
 
-    const [{ result }] = await this.db.query<[T[]]>(string_query, query);
+    const [{ result = [] }] = await this.db.query<[T[]]>(string_query, query);
 
     return this.handleResult(result);
   }
 
   async findAll(): Promise<T[]> {
-    const [{ result }] = await this.db.query<[T[]]>(
+    const [{ result = [] }] = await this.db.query<[T[]]>(
       `SELECT * FROM ${this.name};`
     );
 
@@ -64,13 +52,13 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
   private handleResult(result: T[]) {
     const user = result[0];
 
-    if (!user) throw new Error("USER_NOT_FOUND");
+    if (!user) throw new Error("NOT_FOUND");
 
     return user;
   }
 
   async findByUuid(uuid: string): Promise<T> {
-    const [{ result }] = await this.db.query<[T[]]>(
+    const [{ result = [] }] = await this.db.query<[T[]]>(
       `SELECT * FROM ${this.name} WHERE uuid == $uuid`,
       { uuid }
     );
@@ -79,7 +67,7 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
   }
 
   async updateWithUuid(uuid: string, up: Partial<T>): Promise<T> {
-    const [{ result }] = await this.db.query<[T[]]>(
+    const [{ result = [] }] = await this.db.query<[T[]]>(
       `UPDATE ${this.name} MERGE $up WHERE uuid == $uuid`,
       { up, uuid }
     );
@@ -91,7 +79,7 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
     try {
       const [inserted] = await this.db.create(this.name, thing);
 
-      return inserted;
+      return inserted as T;
     } catch (e) {
       if (e instanceof Error) {
         if (e.message.endsWith("already exists"))
@@ -100,5 +88,9 @@ export class SurrealRepository<T extends Basic> implements Repository<T> {
 
       throw e;
     }
+  }
+
+  async deleteByUuid(uuid: string): Promise<void> {
+    await this.db.query(`DELETE ${this.name} WHERE uuid == $uuid`, { uuid });
   }
 }

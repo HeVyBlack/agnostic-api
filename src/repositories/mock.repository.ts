@@ -1,5 +1,5 @@
-import { Repository } from "./repositories.ts";
-import { type Basic } from "../schemas/schemas.ts";
+import { type Repository } from "../repositories.ts";
+import { type Basic } from "../schemas.ts";
 
 export class MockRepository<T extends Basic> implements Repository<T> {
   name: string;
@@ -8,16 +8,12 @@ export class MockRepository<T extends Basic> implements Repository<T> {
     this.name = name;
   }
 
-  private static instance: MockRepository<Basic>;
-
   private db: T[] = [];
 
   public static async getInstance(name: string) {
-    if (!MockRepository.instance) {
-      MockRepository.instance = new MockRepository(name);
-    }
+    const instance = new MockRepository(name);
 
-    return MockRepository.instance;
+    return instance;
   }
 
   async closeConnection(): Promise<void> {
@@ -67,6 +63,10 @@ export class MockRepository<T extends Basic> implements Repository<T> {
   async insertOne(thing: T): Promise<T> {
     const index = this.db.push(thing);
 
-    return this.db[index];
+    return this.db[index]!;
+  }
+
+  async deleteByUuid(uuid: string): Promise<void> {
+    this.db = this.db.filter((v) => v.uuid !== uuid);
   }
 }

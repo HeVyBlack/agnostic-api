@@ -1,6 +1,6 @@
-import { Basic } from "./schemas.ts";
 import { z } from "zod";
-import { v4 } from "uuid";
+import { Basic } from "./basic.schema.ts";
+import { Products } from "./product.schema.ts";
 
 export const Role = z.enum(["user", "admin", "super-admin"]);
 
@@ -15,7 +15,14 @@ export const User = Basic.extend({
   password: z.string(),
   verify_email: z.boolean(),
   roles: Roles,
+  products: Products.default([]),
 });
+
+export const UserRaw = User.extend({
+  products: z.array(z.string()).default([]),
+});
+
+export type UserRaw = z.infer<typeof UserRaw>;
 
 export interface User extends z.infer<typeof User> {}
 

@@ -6,5 +6,3 @@ export const Basic = z.object({
 });
 
 export type Basic = z.infer<typeof Basic>;
-
-export * from "./user.schema.ts";
