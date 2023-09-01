@@ -17,7 +17,10 @@ export class SurrealRepository<T extends Schema>
   public static async GetInstance<T extends Schema>(name: string, uri: string) {
     const instance: SurrealRepository<T> = new SurrealRepository<T>(name, uri);
 
-    await instance.db.signin({ user: "api", pass: "root" });
+    await instance.db.signin({
+      user: `${process.env["SURREAL_USER"]}`,
+      pass: `${process.env["SURREAL_PASS"]}`,
+    });
     await instance.db.use({ ns: "api", db: name });
 
     return instance;
