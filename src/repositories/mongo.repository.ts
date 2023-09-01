@@ -41,17 +41,17 @@ export class MongoRepository<T extends Schema>
     return instance;
   }
 
-  public async closeConnection(): Promise<void> {
+  public async CloseConnection(): Promise<void> {
     return await this.client.close();
   }
 
-  public async find(query: { [K in keyof T]: T[K] }): Promise<T> {
+  public async Find<V extends keyof T>(query: Record<V, T[V]>): Promise<T> {
     const thing: T = (await this.coll.findOne(query as Filter<T>)) as T;
     if (!thing) throw new RepositoryError("NOT_FOUND");
     return thing as T;
   }
 
-  public async findAll(): Promise<T[]> {
+  public async FindAll(): Promise<T[]> {
     const cursor: FindCursor<T> = this.coll.find() as FindCursor<T>;
 
     const all: T[] = [];
@@ -63,7 +63,10 @@ export class MongoRepository<T extends Schema>
     return all;
   }
 
-  public async update(query: KeyInKeys<T>, up: KeyInKeys<T>): Promise<T> {
+  public async Update<V extends keyof T>(
+    query: Record<V, T[V]>,
+    up: KeyInKeys<T>
+  ): Promise<T> {
     const thing: WithId<T> | null = await this.coll.findOneAndUpdate(
       query as Filter<T>,
       up
@@ -74,7 +77,7 @@ export class MongoRepository<T extends Schema>
     return thing as T;
   }
 
-  public async insertOne(thing: T): Promise<T> {
+  public async InsertOne(thing: T): Promise<T> {
     const inserted: InsertOneResult<T> = await this.coll.insertOne(
       thing as OptionalUnlessRequiredId<T>
     );
@@ -82,7 +85,7 @@ export class MongoRepository<T extends Schema>
     return inserted as unknown as T;
   }
 
-  public async delete(query: KeyInKeys<T>): Promise<T> {
+  public async Delete<V extends keyof T>(query: Record<V, T[V]>): Promise<T> {
     const thing: WithId<T> | null = await this.coll.findOneAndDelete(
       query as Filter<T>
     );

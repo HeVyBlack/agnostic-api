@@ -5,17 +5,20 @@ export type KeyInKeys<T> = { [K in keyof T]: T[K] };
 export interface RepositoriesRepository<T extends Schemas.Schema> {
   name: string;
 
-  closeConnection(): Promise<void>;
+  CloseConnection(): Promise<void>;
 
-  find(query: KeyInKeys<T>): Promise<T>;
+  Find<V extends keyof T>(query: Record<V, T[V]>): Promise<T>;
 
-  findAll(): Promise<T[]>;
+  FindAll(): Promise<T[]>;
 
-  update(query: KeyInKeys<T>, up: KeyInKeys<T>): Promise<T>;
+  Update<V extends keyof T>(
+    query: Record<V, T[V]>,
+    up: KeyInKeys<T>
+  ): Promise<T>;
 
-  insertOne(thing: T): Promise<T>;
+  InsertOne(thing: T): Promise<T>;
 
-  delete(query: KeyInKeys<T>): Promise<T>;
+  Delete<V extends keyof T>(query: Record<V, T[V]>): Promise<T>;
 }
 
 export class RepositoryError {

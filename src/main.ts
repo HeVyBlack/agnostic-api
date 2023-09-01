@@ -11,7 +11,7 @@ import User = Schemas.User;
 
 import { Repositories } from "@Repository";
 import Repository = Repositories.Repository;
-import UserRepository = Repositories.Mongo;
+import UserRepository = Repositories.Surreal;
 
 export namespace Agnostic {
   const sourceDirPath = url.fileURLToPath(import.meta.url);
