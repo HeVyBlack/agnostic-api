@@ -1,3 +1,5 @@
 node_modules
 pnpm-lock.yaml
 build
+.env
+tsconfig.tsbuildinfo

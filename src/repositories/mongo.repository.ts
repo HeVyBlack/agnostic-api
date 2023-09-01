@@ -1,92 +1,94 @@
-import { type Repository } from "../repositories.ts";
-import { Basic } from "../schemas.ts";
 import {
-  type Filter,
-  type OptionalUnlessRequiredId,
+  KeyInKeys,
+  RepositoriesRepository,
+  RepositoryError,
+} from "./repositories.ts";
+import { Schemas } from "@Schemas";
+import Schema = Schemas.Schema;
+
+import {
+  Collection,
+  Db,
+  Filter,
+  FindCursor,
+  InsertOneResult,
   MongoClient,
+  OptionalUnlessRequiredId,
+  WithId,
 } from "mongodb";
 
-export class MongoRepository<T extends Basic> implements Repository<T> {
-  private constructor(name: string) {
+export class MongoRepository<T extends Schema>
+  implements RepositoriesRepository<T>
+{
+  public name: string;
+  private client: MongoClient;
+  private db: Db;
+  private coll: Collection<T>;
+
+  private constructor(name: string, uri: string) {
     this.name = name;
-    this.coll = this.database.collection(name);
+    this.client = new MongoClient(uri);
+    this.db = this.client.db("api");
+    this.coll = this.db.collection<T>(name);
   }
 
-  name: string;
-
-  private client = new MongoClient("mongodb://127.0.0.1:27017");
-
-  private database = this.client.db("api");
-
-  private coll: ReturnType<typeof this.database.collection<T>>;
-
-  public static async getInstance<T extends Basic>(name: string) {
-    const instance = new MongoRepository<T>(name);
-
+  public static async GetInstance<T extends Schema>(
+    name: string,
+    uri: string
+  ): Promise<MongoRepository<T>> {
+    const instance: MongoRepository<T> = new MongoRepository<T>(name, uri);
     await instance.client.connect();
-
     return instance;
   }
 
-  async closeConnection(): Promise<void> {
-    await this.client.close();
+  public async closeConnection(): Promise<void> {
+    return await this.client.close();
   }
 
-  async find(query: Partial<T>): Promise<T> {
-    const found = await this.coll.findOne(query as Filter<T>);
-
-    if (!found) throw new Error("NOT_FOUND");
-
-    return found as T;
+  public async find(query: { [K in keyof T]: T[K] }): Promise<T> {
+    const thing: T = (await this.coll.findOne(query as Filter<T>)) as T;
+    if (!thing) throw new RepositoryError("NOT_FOUND");
+    return thing as T;
   }
 
-  async findAll(): Promise<T[]> {
-    const cursor = this.coll.find();
+  public async findAll(): Promise<T[]> {
+    const cursor: FindCursor<T> = this.coll.find() as FindCursor<T>;
 
-    const all = [];
+    const all: T[] = [];
 
     for await (const doc of cursor) {
       all.push(doc);
     }
 
-    return all as T[];
+    return all;
   }
 
-  async findByUuid(uuid: string): Promise<T> {
-    const found = await this.coll.findOne({ uuid } as Filter<T>);
-
-    if (!found) throw new Error("NOT_FOUND");
-
-    return found as T;
-  }
-
-  async updateWithUuid(uuid: string, up: Partial<T>): Promise<T> {
-    const { matchedCount } = await this.coll.updateOne(
-      { uuid } as Filter<T>,
-      { $set: up },
-      { upsert: false }
+  public async update(query: KeyInKeys<T>, up: KeyInKeys<T>): Promise<T> {
+    const thing: WithId<T> | null = await this.coll.findOneAndUpdate(
+      query as Filter<T>,
+      up
     );
 
-    if (matchedCount === 0) throw new Error("NOT_FOUND");
+    if (!thing) throw new RepositoryError("NOT_FOUND");
 
-    const updated = await this.findByUuid(uuid);
-
-    if (!updated) throw new Error("NOT_FOUND");
-
-    return updated;
+    return thing as T;
   }
 
-  async insertOne(thing: T): Promise<T> {
-    const { insertedId } = await this.coll.insertOne(
+  public async insertOne(thing: T): Promise<T> {
+    const inserted: InsertOneResult<T> = await this.coll.insertOne(
       thing as OptionalUnlessRequiredId<T>
     );
 
-    const inserted = await this.coll.findOne({ _id: insertedId } as Filter<T>);
-
-    return inserted as T;
+    return inserted as unknown as T;
   }
 
-  async deleteByUuid(uuid: string): Promise<void> {
-    await this.coll.deleteOne({ uuid } as Filter<T>);
+  public async delete(query: KeyInKeys<T>): Promise<T> {
+    const thing: WithId<T> | null = await this.coll.findOneAndDelete(
+      query as Filter<T>
+    );
+
+    if (!thing) throw new RepositoryError("NOT_FOUND");
+
+    return thing as T;
   }
 }
