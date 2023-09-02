@@ -1,27 +1,44 @@
-import { KeyInKeys, RepositoriesRepository } from "./repositories.ts";
+import {
+  KeyInKeys,
+  RepositoriesRepository,
+  RepositoryError,
+} from "./repositories.ts";
+
 import { Schemas } from "@Schemas";
 import Schema = Schemas.Schema;
 
+import { Utils } from "@Utils";
+import Env = Utils.Env;
+import Log = Utils.Log;
+
 import { Surreal } from "surrealdb.js";
+import { StatusCodes } from "http-status-codes";
 
 export class SurrealRepository<T extends Schema>
   implements RepositoriesRepository<T>
 {
   public name: string;
   private db: Surreal;
-  private constructor(name: string, uri: string) {
+  private constructor(name: string) {
     this.name = name;
-    this.db = new Surreal(uri);
+    this.db = new Surreal(Env["SURREAL_URI"]);
   }
 
-  public static async GetInstance<T extends Schema>(name: string, uri: string) {
-    const instance: SurrealRepository<T> = new SurrealRepository<T>(name, uri);
+  private static ConnectionStatus: string[] = ["OPEN", "CLOSE", "RECONNECTING"];
+
+  public static async GetInstance<T extends Schema>(name: string) {
+    const instance: SurrealRepository<T> = new SurrealRepository<T>(name);
 
     await instance.db.signin({
-      user: `${process.env["SURREAL_USER"]}`,
-      pass: `${process.env["SURREAL_PASS"]}`,
+      user: `${Env["SURREAL_USER"]}`,
+      pass: `${Env["SURREAL_PASS"]}`,
     });
     await instance.db.use({ ns: "api", db: name });
+
+    const status: number = instance.db.status;
+    const connectionStatus: string = this.ConnectionStatus[status]!;
+
+    Log.info(`Connection to SurrealDb: ${connectionStatus}`);
 
     return instance;
   }
@@ -33,7 +50,7 @@ export class SurrealRepository<T extends Schema>
   private HandleResult(result: T[]): T {
     const res: T | undefined = result[0];
 
-    if (!res) throw new Error("NOT_FOUND");
+    if (!res) throw new RepositoryError("NOT_FOUND", StatusCodes["NOT_FOUND"]);
 
     return res;
   }
@@ -41,7 +58,7 @@ export class SurrealRepository<T extends Schema>
   private GetWhereFromQuery<V extends keyof T>(query: Record<V, T[V]>): string {
     const keys: string[] = Object.keys(query);
 
-    if (keys.length === 0) throw new Error("INVALID_QUERY");
+    if (keys.length === 0) throw new RepositoryError("INVALID_QUERY", StatusCodes["BAD_REQUEST"]);
 
     let stringQuery: string = " WHERE";
 
@@ -74,7 +91,7 @@ export class SurrealRepository<T extends Schema>
     query: Record<V, T[V]>,
     up: KeyInKeys<T>
   ): Promise<T> {
-    const stringQuery = `UPDATE ${this.name} MERGE $up`.concat(
+    const stringQuery: string = `UPDATE ${this.name} MERGE $up`.concat(
       this.GetWhereFromQuery(query)
     );
 
@@ -85,6 +102,7 @@ export class SurrealRepository<T extends Schema>
 
   public async InsertOne(thing: T): Promise<T> {
     const [inserted] = await this.db.create<T>(this.name, thing);
+
     return inserted as T;
   }
 

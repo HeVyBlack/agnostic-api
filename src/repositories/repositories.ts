@@ -1,4 +1,5 @@
 import { Schemas } from "@Schemas";
+import { StatusCodes } from "http-status-codes";
 
 export type KeyInKeys<T> = { [K in keyof T]: T[K] };
 
@@ -22,8 +23,10 @@ export interface RepositoriesRepository<T extends Schemas.Schema> {
 }
 
 export class RepositoryError {
+  code: StatusCodes | undefined;
   message: string;
-  public constructor(message: string) {
+  public constructor(message: string, code?: StatusCodes) {
+    this.code = code;
     this.message = message;
   }
 }

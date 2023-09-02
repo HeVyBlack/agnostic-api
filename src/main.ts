@@ -8,44 +8,65 @@ import { Modules } from "@Modules";
 
 import { Schemas } from "@Schemas";
 import User = Schemas.User;
+import Schema = Schemas.Schema;
 
 import { Repositories } from "@Repository";
 import Repository = Repositories.Repository;
-import UserRepository = Repositories.Surreal;
+import UserRepository = Repositories.Mongo;
+
+import { Utils } from "@Utils";
+import Env = Utils.Env;
+import Log = Utils.Log;
 
 export namespace Agnostic {
-  const sourceDirPath = url.fileURLToPath(import.meta.url);
-  export const sourceDir: string = path.dirname(sourceDirPath);
-  export const publicDir: string = path.resolve(sourceDir, "..", "public");
-  export const fontsDir: string = path.resolve(sourceDir, "..", "fonts");
-
   export class Program {
+    private static readonly sourceDirPath = url.fileURLToPath(import.meta.url);
+
+    public static readonly sourceDir: string = path.dirname(this.sourceDirPath);
+
+    public static readonly publicDir: string = path.resolve(this.sourceDir, "..", "public");
+
+    public static readonly fontsDir: string = path.resolve(this.sourceDir, "..", "fonts");
+
+    private static OnShutDown<T extends Schema>(app: App.Instance, repositories: Repository<T>[]) {
+      const signals = ["SINGINT", "SIGTERM"] as const;
+
+      for (const signal of signals) {
+        process.on(signal, async function () {
+          await app.close();
+
+          for (const repo of repositories) {
+            await repo.CloseConnection();
+          }
+
+          process.exit(0);
+        });
+      }
+    }
+
     public static async Main(): Promise<void> {
       try {
-        const app: FastifyInstance = await App.Builder.BuildApp();
+        const userRepository: Repository<User> = await UserRepository.GetInstance<User>("users");
 
-        const userRepositoryUri = process.env["USER_URI"];
+        const modulator = new Modules.Modulator(userRepository);
 
-        if (!userRepositoryUri) throw new Error("Need a URI for users");
+        const appBuilder = new App.Builder.AppBuilder(modulator);
 
-        const userRepository: Repository<User> =
-          await UserRepository.GetInstance("users", userRepositoryUri);
+        const app: FastifyInstance = await appBuilder.BuildApp();
 
-        const modulator: App.FunctionRegister =
-          Modules.Modulator(userRepository);
-        await app.register(modulator, { prefix: "/api" });
-
-        const port: number = parseInt(`${process.env["PORT"]}`) || 3000;
+        const port: number = parseInt(`${Env["PORT"]}`) || 3000;
 
         await app.listen({ port });
-        console.log(`Server on port ${port}`);
-      } catch (e) {
-        if (e instanceof Error) console.error(e.message);
+        Log.info(`Server on port ${port}`);
 
-        console.error("The program will not run due errors!");
+        this.OnShutDown(app, [userRepository]);
+      } catch (e) {
+        if (e instanceof Error) Log.error(e.message);
+
+        Log.error("The program will not run due errors!");
       }
     }
   }
 }
 
-await Agnostic.Program.Main();
+Agnostic.Program.Main();

@@ -7,10 +7,11 @@ import Repository = Repositories.Repository;
 import { Schemas } from "@Schemas";
 import User = Schemas.User;
 
-export function ModulesModulator(
-  user_repository: Repository<User>
-): App.FunctionRegister {
-  return async function (app: App.Instance) {
-    await app.register(Auth(user_repository), { prefix: "/auth" });
+export class ModulesModulator {
+  constructor(private readonly userRepository: Repository<User>) {}
+
+  public readonly Plugin = async (app: App.Instance) => {
+    const auth = new Auth(this.userRepository);
+    await app.register(auth.Plugin, { prefix: "/auth" });
   };
 }

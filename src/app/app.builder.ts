@@ -1,9 +1,7 @@
 import Fastify, { FastifyInstance } from "fastify";
 
-import FastifySwagger from "@fastify/swagger";
-import SwaggerOptions = FastifySwagger.SwaggerOptions;
-import FastifySwaggerUI from "@fastify/swagger-ui";
-import SwaggerUIOptions = FastifySwaggerUI.FastifySwaggerUiOptions;
+import FastifySwagger, { SwaggerOptions } from "@fastify/swagger";
+import FastifySwaggerUI, { FastifySwaggerUiOptions } from "@fastify/swagger-ui";
 
 import {
   jsonSchemaTransform,
@@ -13,33 +11,46 @@ import {
 
 import { AppHdlrs } from "./app.hdlrs.ts";
 
-export interface AppInstance extends FastifyInstance {}
+import { Utils } from "@Utils";
+import Env = Utils.Env;
 
-export class AppBuilder {
-  private static readonly SwaggerOptions: SwaggerOptions = {
-    transform: jsonSchemaTransform,
-  };
-  private static readonly SwaggerUIOptions: SwaggerUIOptions = {
-    routePrefix: "/docs",
-  };
+import { Modules } from "@Modules";
+import Modulator = Modules.Modulator;
 
-  private static async AddSwagger(fastify: FastifyInstance): Promise<void> {
-    if (process.env["NODE_ENV"] !== "production") {
-      await fastify.register(FastifySwagger, this.SwaggerOptions);
-      await fastify.register(FastifySwaggerUI, this.SwaggerUIOptions);
+export namespace AppBuilder {
+  export interface AppInstance extends FastifyInstance {}
+
+  export class AppBuilder {
+    public constructor(private readonly modulator: Modulator) {}
+
+    private readonly SwaggerOptions: SwaggerOptions = {
+      transform: jsonSchemaTransform,
+    };
+
+    private readonly SwaggerUIOptions: FastifySwaggerUiOptions = {
+      routePrefix: "/docs",
+    };
+
+    public async AddSwagger(fastify: FastifyInstance): Promise<void> {
+      if (Env["NODE_ENV"] !== "production") {
+        await fastify.register(FastifySwagger, this.SwaggerOptions);
+        await fastify.register(FastifySwaggerUI, this.SwaggerUIOptions);
+      }
     }
-  }
 
-  public static async BuildApp(): Promise<AppInstance> {
-    const fastify: FastifyInstance = Fastify({ logger: false });
+    public async BuildApp(): Promise<AppInstance> {
+      const fastify: FastifyInstance = Fastify({ logger: false });
 
-    fastify.setNotFoundHandler(AppHdlrs.NotFoundHdlr);
+      fastify.setNotFoundHandler(AppHdlrs.NotFoundHdlr);
 
-    await this.AddSwagger(fastify);
+      await this.AddSwagger(fastify);
 
-    fastify.setValidatorCompiler(validatorCompiler);
-    fastify.setSerializerCompiler(serializerCompiler);
+      fastify.setValidatorCompiler(validatorCompiler);
+      fastify.setSerializerCompiler(serializerCompiler);
 
-    return fastify as AppInstance;
+      await fastify.register(this.modulator.Plugin, { prefix: "/api" });
+
+      return fastify as AppInstance;
+    }
   }
 }

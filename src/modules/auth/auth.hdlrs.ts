@@ -1,17 +1,23 @@
 import jwt from "jsonwebtoken";
-import { FastifyRequest } from "fastify";
+import { FastifyReply, FastifyRequest } from "fastify";
+
 import { Schemas } from "@Schemas";
 import User = Schemas.User;
 import Reply = Schemas.Reply;
 
+import { Utils } from "@Utils";
+import Env = Utils.Env;
+
 import { AuthService } from "./auth.service.ts";
-import { SignUpUser, SignUser } from "./auth.schemas.ts";
+import { AuthSchemas } from "./auth.schemas.ts";
+import { Auth } from "./auth.ts";
 
 export class AuthHdlrs {
   constructor(private readonly service: AuthService) {}
 
   public readonly PostSignUp = async (
-    req: FastifyRequest<{ Body: SignUpUser }>
+    req: FastifyRequest<{ Body: AuthSchemas.SignUpUser }>,
+    rep: FastifyReply
   ): Promise<Reply> => {
     try {
       const user: User = User.parse(req.body);
@@ -23,28 +29,32 @@ export class AuthHdlrs {
         message: "OK",
       };
     } catch (e) {
-      return {
-        code: 400,
-        message: "EMAIL_IN_USE",
-      };
+      if (e instanceof Auth.Error) return Auth.Error.Handler(e, rep);
+
+      throw e;
     }
   };
 
   public readonly PostSignIn = async (
-    req: FastifyRequest<{ Body: SignUser }>
+    req: FastifyRequest<{ Body: AuthSchemas.SignUser }>,
+    rep: FastifyReply
   ): Promise<Reply> => {
-    const user = await this.service.SignUser(req.body);
+    try {
+      const user = await this.service.SignUser(req.body);
 
-    const token = jwt.sign(
-      { uuid: user["uuid"] },
-      `${process.env["SECRET_PASSWORD"]}`,
-      { expiresIn: "12h" }
-    );
+      const token = jwt.sign({ uuid: user["uuid"] }, `${Env["SECRET_PASSWORD"]}`, {
+        expiresIn: "12h",
+      });
 
-    return {
-      code: 200,
-      message: "OK",
-      token,
-    };
+      return {
+        code: 200,
+        message: "OK",
+        token,
+      };
+    } catch (e) {
+      if (e instanceof Auth.Error) return Auth.Error.Handler(e, rep);
+
+      throw e;
+    }
   };
 }

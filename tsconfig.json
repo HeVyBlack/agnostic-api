@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
     "paths": {
-      "@Schemas": ["schemas/index.ts"],
-      "@App": ["app/index.ts"],
+      "@Schemas": ["schemas/namespace.ts"],
+      "@App": ["app/namespace.ts"],
       "@Main": ["main.ts"],
-      "@Modules": ["modules/index.ts"],
-      "@Repository": ["repositories/index.ts"]
+      "@Modules": ["modules/namespace.ts"],
+      "@Repository": ["repositories/namespace.ts"],
+      "@Utils": ["utils/namespace.ts"]
     },
     "outDir": "./build",
     "rootDir": "./src",

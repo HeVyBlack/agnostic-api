@@ -5,8 +5,10 @@ import { Schemas } from "@Schemas";
 import User = Schemas.User;
 
 import argon2 from "argon2";
+import { StatusCodes } from "http-status-codes";
 
-import { SignUser } from "./auth.schemas.ts";
+import { AuthSchemas } from "./auth.schemas.ts";
+import { Auth } from "./auth.ts";
 
 export class AuthService {
   constructor(private readonly repository: Repository<User>) {}
@@ -18,18 +20,26 @@ export class AuthService {
       user["password"] = await argon2.hash(user["password"]);
 
       const inserted: User = await this.repository.InsertOne(user);
-      
+
       return inserted;
     }
-    throw new Error("EMAIL_IN_USE");
+    throw new Auth.Error("EMAIL_IN_USE", StatusCodes["BAD_REQUEST"]);
   }
 
-  public async SignUser(user: SignUser): Promise<User> {
-    const find = await this.repository.Find<"email">({ email: user.email });
-    const match = argon2.verify(find["password"], user["password"]);
+  public async SignUser(user: AuthSchemas.SignUser): Promise<User> {
+    try {
+      const find = await this.repository.Find<"email">({ email: user.email });
+      const match = argon2.verify(find["password"], user["password"]);
 
-    if (!match) throw new Error("WRONG_PASSWORD");
+      if (!match) throw new Auth.Error("WRONG_PASSWORD", StatusCodes["BAD_REQUEST"]);
 
-    return find;
+      return find;
+    } catch (e) {
+      if (e instanceof Repositories.Error) {
+        if (e.code === StatusCodes["NOT_FOUND"])
+          throw new Auth.Error("USER_NOT_FOUND", StatusCodes["NOT_FOUND"]);
+      }
+      throw new Auth.Error("BAD_REQUEST", StatusCodes["BAD_REQUEST"]);
+    }
   }
 }
